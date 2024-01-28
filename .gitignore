@@ -1,3 +1,6 @@
+# script / testing file which shouldhn't get into the repo
+main.py
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
