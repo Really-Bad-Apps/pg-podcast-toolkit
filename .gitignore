@@ -1,6 +1,9 @@
 # script / testing file which shouldhn't get into the repo
 main.py
 
+$ more dev environment stuff
+.vscode
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
