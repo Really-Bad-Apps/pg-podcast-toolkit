@@ -5,8 +5,6 @@ import email.utils
 from time import mktime
 import time
 
-from pg_podcast_toolkit.Item import Item
-
 class InvalidPodcastFeed(ValueError):
     pass
 
