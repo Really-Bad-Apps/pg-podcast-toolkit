@@ -201,7 +201,7 @@ class Podcast():
 
     def add_item(self, tag):
         try:
-            item = Item(tag)
+            item = item(tag)
         except Exception as e:
             return
 
