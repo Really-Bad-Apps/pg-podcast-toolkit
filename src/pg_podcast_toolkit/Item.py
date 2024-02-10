@@ -3,7 +3,7 @@ import email.utils
 from time import mktime
 from bs4 import Tag
 import hashlib
-
+import logging
 
 # parse time formats in hh:mm:ss strings into actual seconds
 def parse_hms(hms):
@@ -223,9 +223,20 @@ class Item(object):
             self.author = None
 
     def set_description(self, tag):
-        """Parses description and set value."""
+        """Parses description, preserves HTML content, and checks size."""
         try:
-            self.description = tag.string
+            description_content = str(tag)
+            max_bytes = 16384  # Maximum allowed bytes for the description
+            
+            # Check the byte length of the description content
+            if len(description_content.encode('utf-8')) > max_bytes:
+                # If the description exceeds the limit, replace it with a placeholder
+                logging.warning("Episode description exceeds maximum length, removing content")
+                self.description = "description overflow, removed"
+            else:
+                # If within the limit, use the description as is
+                self.description = description_content
+                
         except AttributeError:
             self.description = None
 
