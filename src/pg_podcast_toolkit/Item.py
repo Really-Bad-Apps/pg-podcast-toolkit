@@ -83,8 +83,9 @@ class Item(object):
         date_time (datetime): When published
     """
 
-    def __init__(self, soup):
+    def __init__(self, soup, feed_url = None):
         self.soup = soup
+        self.feed_url = feed_url
 
         # Initialize attributes as they might not be populated
         self.author = None
@@ -231,7 +232,7 @@ class Item(object):
             # Check the byte length of the description content
             if len(description_content.encode('utf-8')) > max_bytes:
                 # If the description exceeds the limit, replace it with a placeholder
-                logging.warning("Episode description exceeds maximum length, removing content")
+                logging.warning("Episode description exceeds maximum length, removing content from parent feed at {self.feed_url}")
                 self.description = "description overflow, removed"
             else:
                 # If within the limit, use the description as is

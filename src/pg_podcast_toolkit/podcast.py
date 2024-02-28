@@ -53,8 +53,9 @@ class Podcast():
         date_time (datetime): When published
     """
 
-    def __init__(self, feed_content):
+    def __init__(self, feed_content, feed_url=None):
         self.feed_content = feed_content
+        self.feed_url = feed_url
         self.items = []
         self.itunes_categories = []
 
@@ -201,7 +202,7 @@ class Podcast():
 
     def add_item(self, tag):
         try:
-            item = item(tag)
+            item = item(tag, feed_url=self.feed_url)
         except Exception as e:
             return
 
