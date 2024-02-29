@@ -227,12 +227,12 @@ class Item(object):
         """Parses description, preserves HTML content, and checks size."""
         try:
             description_content = str(tag)
-            max_bytes = 16384  # Maximum allowed bytes for the description
+            max_bytes = 65536  # Maximum allowed bytes for the description
             
             # Check the byte length of the description content
             if len(description_content.encode('utf-8')) > max_bytes:
                 # If the description exceeds the limit, replace it with a placeholder
-                logging.warning("Episode description exceeds maximum length, removing content from parent feed at {self.feed_url}")
+                logging.info("Episode description exceeds maximum length, removing content from parent feed at {self.feed_url}")
                 self.description = "description overflow, removed"
             else:
                 # If within the limit, use the description as is
