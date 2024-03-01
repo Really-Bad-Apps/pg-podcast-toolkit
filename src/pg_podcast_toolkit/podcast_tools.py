@@ -1,6 +1,7 @@
 from lxml import etree
 import requests
 from typing import Dict
+from .media_resource import MediaResource
 
 def load_podcast_file_into_etree(file_path: str) -> etree.ElementTree:
     """
@@ -61,3 +62,38 @@ def parse_enclosure_map_from_etree(podcast_etree: etree._ElementTree) -> Dict[st
         if guid and enclosure is not None:
             enclosure_map[guid] = enclosure.attrib.get('url')
     return enclosure_map
+
+
+def parse_enclosure_map_from_etree(podcast_etree: etree._ElementTree) -> Dict[str, MediaResource]:
+    """
+    Parses a podcast XML loaded as an lxml ElementTree object to extract a mapping of episode GUIDs to MediaResource instances.
+    
+    Args:
+        podcast_etree (etree._ElementTree): The podcast XML loaded as an lxml ElementTree object.
+        
+    Returns:
+        Dict[str, MediaResource]: A dictionary mapping GUIDs of podcast episodes to their corresponding MediaResource instances.
+    """
+    enclosure_map = {}
+    for item in podcast_etree.iterfind('.//item'):
+        guid = item.find('./guid').text if item.find('./guid') is not None else None
+        enclosure = item.find('./enclosure')
+        if guid and enclosure is not None:
+            url = enclosure.attrib.get('url')
+            length = int(enclosure.attrib.get('length', 0)) if enclosure.attrib.get('length') else None
+            media_type = enclosure.attrib.get('type', None)
+            # Example placeholders, adjust as needed
+            hash_ipfs, file_name, local_path = None, None, None
+            media_resource = MediaResource(
+                guid=guid,
+                url=url,
+                length=length,
+                media_type=media_type,
+                hash_ipfs=hash_ipfs,
+                file_name=file_name,
+                local_path=local_path,
+            )
+            enclosure_map[guid] = media_resource
+
+    return enclosure_map
+
