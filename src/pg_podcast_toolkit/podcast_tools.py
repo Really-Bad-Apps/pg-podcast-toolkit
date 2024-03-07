@@ -1,7 +1,73 @@
 from lxml import etree
 import requests
-from typing import Dict
+import logging
+import os
+from typing import Dict, List, Optional
+
 from .media_resource import MediaResource
+
+
+def find_content_item_by_guid(guid: str, lst_media_resources: List[MediaResource]) -> Optional[MediaResource]:
+    """
+    Searches for a media resource in a list of media resources by GUID.
+
+    This function iterates through a given list of media resources, looking for a media resource with a GUID that matches
+    the provided `guid` parameter. If a matching media resource is found, it is returned; otherwise, `None` is returned,
+    indicating that no matching media resource was found in the list.
+
+    Parameters:
+    - guid (str): The globally unique identifier (GUID) of the media resource to search for.
+    - lst_media_resources (List[MediaResource]): A list of MediaResource objects to search through. Each MediaResource
+      object in the list should have a `guid` attribute.
+
+    Returns:
+    - MediaResource or None: Returns the MediaResource object that matches the provided GUID if found; otherwise, returns
+      None.
+    """
+    for media_resource in lst_media_resources:
+        if media_resource.guid == guid:
+            return media_resource
+        
+    return None
+
+
+def download_media(media_resource_map: Dict[str, MediaResource], destination_dir: str) -> List[MediaResource]:
+    """
+    Downloads media files from a given map of GUIDs to MediaResource instances and updates each MediaResource with the local path where the file was saved. This function returns a list of the updated MediaResource instances.
+
+    Args:
+        media_resource_map (Dict[str, MediaResource]): A dictionary mapping GUIDs of podcast episodes to their corresponding MediaResource instances. Each MediaResource must contain a valid URL to the media file.
+        destination_dir (str): The directory where media files will be saved. The directory will be created if it does not exist.
+
+    Returns:
+        List[MediaResource]: A list of MediaResource instances that have been updated with the local path of the downloaded media files. This allows for easy access to the downloaded content and its metadata.
+    """
+    if not os.path.exists(destination_dir):
+        os.makedirs(destination_dir)
+
+    lst_media_resources = []
+    for guid, media_resource in media_resource_map.items():
+        # Download the file from the media resource's URL into the specified directory
+        try:
+            response = requests.get(media_resource.url)
+            response.raise_for_status()  # To ensure we catch HTTP errors
+
+            # Extract filename from MediaResource or use GUID if not available
+            filename = media_resource.file_name if media_resource.file_name else f"{guid}.mp3"
+            file_path = os.path.join(destination_dir, filename)
+
+            with open(file_path, 'wb') as file:
+                file.write(response.content)
+
+            # Update MediaResource with the local path
+            media_resource.local_path = file_path
+            lst_media_resources.append(media_resource)
+            logging.info(f"Downloaded {media_resource.url} to {file_path}")
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Error downloading {media_resource.url}: {e}")
+
+    return lst_media_resources            
+
 
 def load_podcast_file_into_etree(file_path: str) -> etree.ElementTree:
     """
@@ -45,7 +111,7 @@ def retreive_podcast_xml(url: str) -> str:
     return response.text
 
 
-def parse_enclosure_map_from_etree(podcast_etree: etree._ElementTree) -> Dict[str, str]:
+def extract_enclosures(podcast_etree: etree._ElementTree) -> Dict[str, str]:
     """
     Parses a podcast XML loaded as an lxml ElementTree object to extract a mapping of episode GUIDs to enclosure URLs.
     
@@ -64,7 +130,7 @@ def parse_enclosure_map_from_etree(podcast_etree: etree._ElementTree) -> Dict[st
     return enclosure_map
 
 
-def parse_enclosure_map_from_etree(podcast_etree: etree._ElementTree) -> Dict[str, MediaResource]:
+def extract_enclosures(podcast_etree: etree._ElementTree) -> Dict[str, MediaResource]:
     """
     Parses a podcast XML loaded as an lxml ElementTree object to extract a mapping of episode GUIDs to MediaResource instances.
     
