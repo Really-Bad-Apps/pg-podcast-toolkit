@@ -5,17 +5,22 @@ authors = [
   { name="Jason Mazza", email="jason@reallybadapps.com" },
 ]
 description = "Tools for managing podcasting 2.0 feeds"
+keywords = ["podcasting2.0", "ipfs", "rss", "podcast", "parser"]
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.8"
+license = {text = "MIT License"}
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
+dependencies [
+  'beautifulsoup4', 'requests', 'lxml'
+]
 
 [build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project.urls]
 Homepage = "https://github.com/Really-Bad-Apps/pg-podcast-toolkit"
