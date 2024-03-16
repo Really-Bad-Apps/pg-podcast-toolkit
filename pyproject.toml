@@ -1,6 +1,6 @@
 [project]
 name = "pg-podcast-toolkit"
-version = "0.0.4"
+version = "0.0.5"
 authors = [
   { name="Jason Mazza", email="jason@reallybadapps.com" },
 ]
