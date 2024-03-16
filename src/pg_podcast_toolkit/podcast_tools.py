@@ -69,6 +69,27 @@ def download_media(media_resource_map: Dict[str, MediaResource], destination_dir
     return lst_media_resources            
 
 
+def load_podcast_from_url_into_etree(url: str) -> etree.ElementTree:
+    """
+    Fetches a podcast RSS XML from a given URL and parses it into an lxml ElementTree object.
+
+    Args:
+        url (str): The URL of the RSS file to be fetched and loaded.
+
+    Returns:
+        etree.ElementTree: An ElementTree object representing the loaded podcast RSS XML.
+    """
+    # Attempt to fetch the content from the URL
+    response = requests.get(url)
+    response.raise_for_status()  # Raises an HTTPError if the response was unsuccessful
+
+    # Parse the XML content
+    element = etree.fromstring(response.content)
+
+    # Convert the _Element to an ElementTree
+    return etree.ElementTree(element)
+
+
 def load_podcast_file_into_etree(file_path: str) -> etree.ElementTree:
     """
     Loads a podcast XML file from a given file path into an lxml ElementTree object.

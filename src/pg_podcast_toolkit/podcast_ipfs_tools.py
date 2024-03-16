@@ -57,8 +57,8 @@ async def _pin_cid_to_ipfs(ipfs_client: IPFSClient, cid: str):
     indicating the action has been completed. If the function encounters any issues during
     the pinning process, those should be handled by the caller or within the IPFS client implementation.
     """
-    async for pinned in ipfs_client.pin.add(cid):
-        logging.info(f"Added {cid} to IPFS pinset")
+    async for pinned in ipfs_client.pin.add(cid, progress=False):
+        logging.debug(f"Added {cid} to IPFS pinset")
 
 
 async def _add_files_to_ipfs(ipfs_gateway: str, lst_media_resources: List[MediaResource]) -> List[MediaResource]:
@@ -86,13 +86,22 @@ async def _add_files_to_ipfs(ipfs_gateway: str, lst_media_resources: List[MediaR
     """
     client = aioipfs.AsyncIPFS(maddr=ipfs_gateway)
 
+    logging.debug(f"Adding {len(lst_media_resources)} files to IPFS")
     for media_resource in lst_media_resources:
         # Ensure the media resource has a local path set
         if media_resource.local_path:
             await _add_file_to_ipfs(client, media_resource)
-            await _pin_cid_to_ipfs(client, media_resource.hash_ipfs)
         else:
             logging.error(f"MediaResource for {media_resource.file_name} does not have a local path set.")
+
+    logging.debug(f"Pinning {len(lst_media_resources)} files to IPFS")
+    for media_resource in lst_media_resources:
+        # Ensure the media resource has a local path set
+        if media_resource.local_path:
+            await _pin_cid_to_ipfs(client, media_resource.hash_ipfs)
+        else:
+            logging.error(f"MediaResource for {media_resource.hash_ipfs} does not have a local path set.")
+
 
     await client.close()
     return lst_media_resources
