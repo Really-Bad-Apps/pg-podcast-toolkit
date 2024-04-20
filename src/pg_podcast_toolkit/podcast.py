@@ -4,6 +4,8 @@ from datetime import datetime, date
 import email.utils
 from time import mktime
 import time
+from .item import Item
+import logging
 
 class InvalidPodcastFeed(ValueError):
     pass
@@ -202,8 +204,9 @@ class Podcast():
 
     def add_item(self, tag):
         try:
-            item = item(tag, feed_url=self.feed_url)
+            item = Item(tag, feed_url=self.feed_url)
         except Exception as e:
+            logging.exception("error parsing item")
             return
 
         self.items.append(item)
