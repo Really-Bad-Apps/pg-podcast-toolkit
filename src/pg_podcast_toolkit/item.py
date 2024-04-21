@@ -329,7 +329,7 @@ class Item(object):
         try:
             self.itunes_duration = parse_hms(tag.string)
         except Exception:
-            logging.exception(f"Error parsing itunes duration {tag.string}")
+            logging.warning(f"Error parsing itunes duration {tag.string}")
             self.itunes_duration = None
 
     def set_itunes_explicit(self, tag):
