@@ -109,49 +109,49 @@ async def _add_files_to_ipfs(ipfs_gateway: str, lst_media_resources: List[MediaR
 
 def add_ipfs_alt_enclosures_to_podcast(podcast_etree: etree._ElementTree, lst_media_resource: List[MediaResource]) -> etree._ElementTree:
     """
-    Adds alternative enclosures to podcast items using media resources provided.
+    Adds alternate enclosures to podcast items using media resources provided.
 
     This function iterates over each item in the provided podcast RSS feed and attempts to add an
-    <podcast:alternativeEnclosure> sub-element with attributes derived from the corresponding media resource.
+    <podcast:alternateEnclosure> sub-element with attributes derived from the corresponding media resource.
     It requires the podcast namespace to be present in the feed; otherwise, it will raise an exception.
-    The function adds or updates the alternative enclosure for items with a matching GUID found in the list
+    The function adds or updates the alternate enclosure for items with a matching GUID found in the list
     of media resources.
 
     Parameters:
     - podcast_etree (etree._ElementTree): The podcast RSS feed represented as an ElementTree object.
     - lst_media_resource (List[MediaResource]): A list of media resources containing the data needed to
-      construct the alternative enclosure elements. Each media resource should have attributes like
+      construct the alternate enclosure elements. Each media resource should have attributes like
       hash_ipfs, media_type, and file_name.
 
     Returns:
     - etree._ElementTree: The modified podcast RSS feed ElementTree object with added or updated
-      alternative enclosures for items.
+      alternate enclosures for items.
 
     Raises:
     - Exception: If the podcast namespace is not found in the RSS feed, indicating that the feed does not
-      support Podcasting 2.0 specifications necessary for alternative enclosures.
+      support Podcasting 2.0 specifications necessary for alternate enclosures.
 
     Example:
     Assuming you have an ElementTree object `podcast_etree` representing your podcast RSS feed and a list
     `media_resources` containing media resources with IPFS hashes, media types, and filenames, you can add
-    alternative enclosures as follows:
+    alternate enclosures as follows:
     ```python
     updated_podcast_etree = add_ipfs_alt_enclosures_to_podcast(podcast_etree, media_resources)
     ```
 
     Note:
     The function checks for the presence of a GUID for each item in the feed and skips items without one.
-    It also checks if an item already has an <podcast:alternativeEnclosure> to avoid duplicates, using the existing
+    It also checks if an item already has an <podcast:alternateEnclosure> to avoid duplicates, using the existing
     enclosure if present. The media resource is identified by matching the item's GUID with the media resource's GUID.
     """
-    # Assuming we want to add a <podcast:alternativeEnclosure> to <item>
+    # Assuming we want to add a <podcast:alternateEnclosure> to <item>
     # find the podcast namespace
     namespace_map = podcast_etree.getroot().nsmap
     
     # there is no easy way to add a new namespace to the etree, so we need to check if the podcast namespace is present
     # and bail if it's not.
     if 'podcast' not in namespace_map:
-        raise Exception("Podcast namespace not found in RSS feed. We need a podcasting 2.0 feed to add alternative enclosures.")
+        raise Exception("Podcast namespace not found in RSS feed. We need a podcasting 2.0 feed to add alternate enclosures.")
     
     podcast_ns = namespace_map['podcast']
 
@@ -175,12 +175,12 @@ def add_ipfs_alt_enclosures_to_podcast(podcast_etree: etree._ElementTree, lst_me
             logging.error(f"Skipping item without media resource for guid {guid}")
             continue
 
-        logging.debug(f"Adding alternative enclosure for {media_resource.hash_ipfs}")
+        logging.debug(f"Adding alternate enclosure for {media_resource.hash_ipfs}")
 
-        # Construct the namespaced tag for alternativeEnclosure
-        alt_enclosure_tag = f"{{{podcast_ns}}}alternativeEnclosure"
+        # Construct the namespaced tag for alternateEnclosure
+        alt_enclosure_tag = f"{{{podcast_ns}}}alternateEnclosure"
 
-        # Check if an alternativeEnclosure already exists
+        # Check if an alternateEnclosure already exists
         existing_alt_enclosure = item.find(alt_enclosure_tag)
         if existing_alt_enclosure is None:
             # If it does not exist, create it
