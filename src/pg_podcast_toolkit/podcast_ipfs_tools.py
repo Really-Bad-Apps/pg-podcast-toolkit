@@ -194,7 +194,7 @@ def add_ipfs_alt_enclosures_to_podcast(podcast_etree: etree._ElementTree, lst_me
         
         # create the podcast source element
         podcast_source_elt = etree.SubElement(alt_enclosure_element, f"{{{podcast_ns}}}source")
-        podcast_source_elt.set("uri", "ipfs://" + media_resource.hash_ipfs + "/" + media_resource.file_name)
+        podcast_source_elt.set("uri", "ipfs://" + media_resource.hash_ipfs + "?filename=" + media_resource.file_name)
 
     return podcast_etree
 
