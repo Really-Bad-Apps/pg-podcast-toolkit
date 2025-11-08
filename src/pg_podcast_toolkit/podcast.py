@@ -230,8 +230,8 @@ class Podcast():
         """
         # Generate deterministic UUID from MD5 hash of feed_url
         if self.feed_url:
-            feed_url_md5 = hashlib.md5(self.feed_url.encode('utf-8')).hexdigest()
-            podcast_id = str(uuid.UUID(feed_url_md5))
+            hash_bytes = hashlib.md5(self.feed_url.encode('utf-8')).digest()
+            podcast_id = str(uuid.UUID(bytes=hash_bytes))
         else:
             podcast_id = None
 

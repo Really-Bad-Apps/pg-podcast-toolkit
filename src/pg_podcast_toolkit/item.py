@@ -255,10 +255,15 @@ class Item(object):
         - extras: JSONB dict containing all other metadata and namespaces
         """
         # Generate deterministic episode ID from MD5(podcast_id || guid)
-        if podcast_id and self.guid:
-            combined = f"{podcast_id}{self.guid}"
-            episode_md5 = hashlib.md5(combined.encode('utf-8')).hexdigest()
-            episode_id = str(uuid.UUID(episode_md5))
+        # Fallback to enclosure_url if guid is missing
+        if podcast_id:
+            guid_value = self.guid if self.guid else self.enclosure_url
+            if guid_value:
+                combined = f"{podcast_id}{guid_value}"
+                hash_bytes = hashlib.md5(combined.encode('utf-8')).digest()
+                episode_id = str(uuid.UUID(bytes=hash_bytes))
+            else:
+                episode_id = None
         else:
             episode_id = None
 
