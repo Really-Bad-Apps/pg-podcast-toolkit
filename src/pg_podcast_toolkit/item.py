@@ -3,6 +3,8 @@ import email.utils
 from time import mktime
 from bs4 import Tag
 import hashlib
+import uuid
+import time
 import logging
 
 # parse time formats in hh:mm:ss strings into actual seconds
@@ -87,6 +89,9 @@ class Item(object):
         self.soup = soup
         self.feed_url = feed_url
 
+        # Captures tags from unknown namespaces (e.g., podcast:*, custom extensions)
+        self.namespaces = {}
+
         # Initialize attributes as they might not be populated
         self.author = None
         self.description = None
@@ -143,6 +148,16 @@ class Item(object):
                 continue
 
             tag_method(c)
+
+        # Second pass: collect unknown namespace tags
+        for c in self.soup.children:
+            if not isinstance(c, Tag):
+                continue
+            tag_tuple = (c.prefix, c.name)
+            # Skip if already handled
+            if tag_tuple in tag_methods:
+                continue
+            self._capture_unknown_tag(c)
 
         self.set_time_published()
         self.set_dates_published()
@@ -211,6 +226,98 @@ class Item(object):
         item['published_date'] = self.published_date
         item['title'] = self.title
         return item
+
+    def to_db_record(self, podcast_id):
+        """
+        Returns a dict structured for database insertion matching schema.sql episodes table.
+
+        Args:
+            podcast_id: UUID of the parent podcast (required for deterministic episode ID generation)
+
+        Returns dict with keys matching episodes database schema:
+        - id: UUID string (MD5 hash of podcast_id || guid)
+        - podcast_id: UUID of parent podcast
+        - guid: Episode GUID
+        - title: Episode title
+        - description: Episode description
+        - image_url: Episode-specific artwork
+        - publish_date: Unix timestamp of publication
+        - duration_seconds: Episode duration in seconds
+        - episode_number: Episode number
+        - season_number: Season number
+        - episode_type: Episode type (full, trailer, bonus)
+        - explicit: Boolean explicit content flag
+        - enclosure_url: Media file URL
+        - enclosure_type: Media MIME type
+        - enclosure_size: Media file size in bytes
+        - created_at: Unix timestamp (current time)
+        - updated_at: Unix timestamp (current time)
+        - extras: JSONB dict containing all other metadata and namespaces
+        """
+        # Generate deterministic episode ID from MD5(podcast_id || guid)
+        if podcast_id and self.guid:
+            combined = f"{podcast_id}{self.guid}"
+            episode_md5 = hashlib.md5(combined.encode('utf-8')).hexdigest()
+            episode_id = str(uuid.UUID(episode_md5))
+        else:
+            episode_id = None
+
+        # Convert itunes_explicit to boolean
+        explicit = None
+        if self.itunes_explicit:
+            explicit = self.itunes_explicit.lower() in ('yes', 'true', '1')
+
+        # Extract episode_number and season_number from itunes tags
+        episode_number = None
+        if self.itunes_episode:
+            try:
+                episode_number = int(self.itunes_episode)
+            except (ValueError, TypeError):
+                pass
+
+        season_number = None
+        if self.itunes_season:
+            try:
+                season_number = int(self.itunes_season)
+            except (ValueError, TypeError):
+                pass
+
+        # Build extras dict with all other metadata
+        extras = {
+            'author': self.author,
+            'content_encoded': self.content_encoded,
+            'episode_id': self.episode_id,
+            'itunes_author_name': self.itunes_author_name,
+            'itunes_order': self.itunes_order,
+            'itunes_subtitle': self.itunes_subtitle,
+            'itunes_summary': self.itunes_summary,
+            'itunes_block': self.itunes_block,
+            'published_date_string': self.published_date,
+            'namespaces': self.namespaces
+        }
+
+        current_time = int(time.time())
+
+        return {
+            'id': episode_id,
+            'podcast_id': podcast_id,
+            'guid': self.guid,
+            'title': self.title,
+            'description': self.description,
+            'image_url': self.itunes_image,
+            'publish_date': self.time_published,
+            'duration_seconds': self.itunes_duration,
+            'episode_number': episode_number,
+            'season_number': season_number,
+            'episode_type': self.itunes_episode_type,
+            'explicit': explicit,
+            'enclosure_url': self.enclosure_url,
+            'enclosure_type': self.enclosure_type,
+            'enclosure_size': self.enclosure_length,
+            'created_at': current_time,
+            'updated_at': current_time,
+            'extras': extras
+        }
 
     def set_rss_element(self):
         """Set each of the basic rss elements."""
@@ -368,3 +475,34 @@ class Item(object):
             self.itunes_summary = tag.string
         except AttributeError:
             self.itunes_summary = None
+
+    def _capture_unknown_tag(self, tag):
+        """Captures tags from unknown namespaces into self.namespaces dict"""
+        namespace = tag.prefix if tag.prefix else 'default'
+        tag_name = tag.name
+
+        if namespace not in self.namespaces:
+            self.namespaces[namespace] = {}
+
+        # Extract tag value and attributes
+        tag_data = {}
+
+        # Get tag attributes
+        if tag.attrs:
+            tag_data['attributes'] = dict(tag.attrs)
+
+        # Get tag text content
+        if tag.string:
+            tag_data['value'] = tag.string
+        elif tag.get_text(strip=True):
+            tag_data['value'] = tag.get_text(strip=True)
+
+        # Handle multiple tags with same name (convert to list)
+        if tag_name in self.namespaces[namespace]:
+            existing = self.namespaces[namespace][tag_name]
+            if isinstance(existing, list):
+                existing.append(tag_data)
+            else:
+                self.namespaces[namespace][tag_name] = [existing, tag_data]
+        else:
+            self.namespaces[namespace][tag_name] = tag_data

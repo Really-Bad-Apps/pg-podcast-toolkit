@@ -1,2 +1,25 @@
-# Created by venv; see https://docs.python.org/3/library/venv.html
-*
+.claude
+.Python
+switch-prod.sh
+venv/
+.idea/
+bin/
+share/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+include/
+lib/
+local/__init__.py
+local/__pycache__/
+tests/__init__.py
+tests/__pycache__/
+sendgrid.env
+tmp/
+keys/
+**/.DS_Store
+dist/
+main.py
+pyvenv.cfg

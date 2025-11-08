@@ -4,6 +4,8 @@ from datetime import datetime, date
 import email.utils
 from time import mktime
 import time
+import hashlib
+import uuid
 from .item import Item
 import logging
 
@@ -60,6 +62,9 @@ class Podcast():
         self.feed_url = feed_url
         self.items = []
         self.itunes_categories = []
+
+        # Captures tags from unknown namespaces (e.g., podcast:*, custom extensions)
+        self.namespaces = {}
 
         # Initialize attributes as they might not be populated
         self.copyright = None
@@ -133,6 +138,16 @@ class Podcast():
 
             tag_method(c)
 
+        # Second pass: collect unknown namespace tags
+        for c in channel.children:
+            if not isinstance(c, Tag):
+                continue
+            tag_tuple = (c.prefix, c.name)
+            # Skip if already handled or is an item
+            if tag_tuple in tag_methods or tag_tuple == (None, 'item') or tag_tuple in many_tag_methods:
+                continue
+            self._capture_unknown_tag(c)
+
         if not self.items:
             for item in self.soup.find_all('item'):
                 self.add_item(item)
@@ -188,6 +203,93 @@ class Podcast():
         podcast_dict['title'] = self.title
         podcast_dict['type'] = self.type
         return podcast_dict
+
+    def to_db_record(self, etag=None, last_modified=None, last_fetched_at=None):
+        """
+        Returns a dict structured for database insertion matching schema.sql.
+
+        Args:
+            etag: HTTP ETag header (optional, for efficient polling)
+            last_modified: HTTP Last-Modified header (optional, for conditional requests)
+            last_fetched_at: Unix timestamp of fetch time (optional, defaults to current time)
+
+        Returns dict with keys matching database schema:
+        - id: UUID string (MD5 hash of feed_url converted to UUID format)
+        - podcast_guid: UUID string from podcast:guid if present
+        - title: Podcast title
+        - feed_url: RSS feed URL
+        - image_url: Podcast image (prefers itunes_image, falls back to image_url)
+        - language: Podcast language
+        - itunes_id: iTunes podcast ID (if extractable from feed)
+        - etag: HTTP ETag for efficient polling
+        - last_modified: HTTP Last-Modified header
+        - last_fetched_at: Unix timestamp of last fetch
+        - created_at: Unix timestamp (current time)
+        - updated_at: Unix timestamp (current time)
+        - extras: JSONB dict containing all other metadata and namespaces
+        """
+        # Generate deterministic UUID from MD5 hash of feed_url
+        if self.feed_url:
+            feed_url_md5 = hashlib.md5(self.feed_url.encode('utf-8')).hexdigest()
+            podcast_id = str(uuid.UUID(feed_url_md5))
+        else:
+            podcast_id = None
+
+        # Extract podcast_guid from namespaces if present
+        podcast_guid = None
+        if 'podcast' in self.namespaces and 'guid' in self.namespaces['podcast']:
+            guid_data = self.namespaces['podcast']['guid']
+            if isinstance(guid_data, dict):
+                podcast_guid = guid_data.get('value')
+            else:
+                podcast_guid = guid_data
+
+        # Extract iTunes ID if available (would need to be parsed from feed_url or other source)
+        itunes_id = None
+
+        # Prefer itunes_image over standard image_url
+        image_url = self.itunes_image if self.itunes_image else self.image_url
+
+        # Build extras dict with all other metadata
+        extras = {
+            'description': self.description,
+            'copyright': self.copyright,
+            'subtitle': self.subtitle,
+            'summary': self.summary,
+            'link': self.link,
+            'last_build_date': self.last_build_date,
+            'published_date': self.published_date,
+            'owner_name': self.owner_name,
+            'owner_email': self.owner_email,
+            'itunes_author_name': self.itunes_author_name,
+            'itunes_categories': self.itunes_categories,
+            'itunes_explicit': self.itunes_explicit,
+            'itunes_complete': self.itunes_complete,
+            'itunes_type': self.itunes_type,
+            'itunes_block': self.itunes_block,
+            'itunes_new_feed_url': self.itunes_new_feed_url,
+            'image_link': self.image_link,
+            'type': self.type,
+            'namespaces': self.namespaces
+        }
+
+        current_time = int(time.time())
+
+        return {
+            'id': podcast_id,
+            'podcast_guid': podcast_guid,
+            'title': self.title,
+            'feed_url': self.feed_url,
+            'image_url': image_url,
+            'language': self.language,
+            'itunes_id': itunes_id,
+            'etag': etag,
+            'last_modified': last_modified,
+            'last_fetched_at': last_fetched_at if last_fetched_at is not None else current_time,
+            'created_at': current_time,
+            'updated_at': current_time,
+            'extras': extras
+        }
 
     def set_soup(self):
         """Sets soup"""
@@ -342,6 +444,37 @@ class Podcast():
             self.summary = tag.string
         except AttributeError:
             self.summary = None
+
+    def _capture_unknown_tag(self, tag):
+        """Captures tags from unknown namespaces into self.namespaces dict"""
+        namespace = tag.prefix if tag.prefix else 'default'
+        tag_name = tag.name
+
+        if namespace not in self.namespaces:
+            self.namespaces[namespace] = {}
+
+        # Extract tag value and attributes
+        tag_data = {}
+
+        # Get tag attributes
+        if tag.attrs:
+            tag_data['attributes'] = dict(tag.attrs)
+
+        # Get tag text content
+        if tag.string:
+            tag_data['value'] = tag.string
+        elif tag.get_text(strip=True):
+            tag_data['value'] = tag.get_text(strip=True)
+
+        # Handle multiple tags with same name (convert to list)
+        if tag_name in self.namespaces[namespace]:
+            existing = self.namespaces[namespace][tag_name]
+            if isinstance(existing, list):
+                existing.append(tag_data)
+            else:
+                self.namespaces[namespace][tag_name] = [existing, tag_data]
+        else:
+            self.namespaces[namespace][tag_name] = tag_data
 
     def set_title(self, tag):
         """Parses title and set value"""
