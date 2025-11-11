@@ -293,6 +293,12 @@ class Podcast():
 
     def set_soup(self):
         """Sets soup"""
+        if not isinstance(self.feed_content, bytes):
+            raise TypeError(
+                "feed_content must be bytes, not string. "
+                "Use response.content (not response.text) when fetching feeds."
+            )
+
         if self.feed_content.startswith(b'<?xml'):
             self.soup = BeautifulSoup(self.feed_content, features="lxml-xml")
         else:
