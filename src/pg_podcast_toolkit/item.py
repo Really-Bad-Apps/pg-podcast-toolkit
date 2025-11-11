@@ -5,6 +5,7 @@ from bs4 import Tag
 import hashlib
 import uuid
 import time
+import json
 import logging
 
 # parse time formats in hh:mm:ss strings into actual seconds
@@ -321,7 +322,7 @@ class Item(object):
             'enclosure_size': self.enclosure_length,
             'created_at': current_time,
             'updated_at': current_time,
-            'extras': extras
+            'extras': json.dumps(extras)
         }
 
     def set_rss_element(self):

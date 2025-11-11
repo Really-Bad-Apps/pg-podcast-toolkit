@@ -6,6 +6,7 @@ from time import mktime
 import time
 import hashlib
 import uuid
+import json
 from .item import Item
 import logging
 
@@ -288,7 +289,7 @@ class Podcast():
             'last_fetched_at': last_fetched_at if last_fetched_at is not None else current_time,
             'created_at': current_time,
             'updated_at': current_time,
-            'extras': extras
+            'extras': json.dumps(extras)
         }
 
     def set_soup(self):
