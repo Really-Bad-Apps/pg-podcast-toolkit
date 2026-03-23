@@ -3,7 +3,6 @@ import email.utils
 from time import mktime
 from bs4 import Tag
 import hashlib
-import uuid
 import time
 import json
 import logging
@@ -255,14 +254,13 @@ class Item(object):
         - updated_at: Unix timestamp (current time)
         - extras: JSONB dict containing all other metadata and namespaces
         """
-        # Generate deterministic episode ID from MD5(podcast_id || guid)
+        # Generate deterministic episode ID from MD5 hex of (podcast_id || guid)
         # Fallback to enclosure_url if guid is missing
         if podcast_id:
             guid_value = self.guid if self.guid else self.enclosure_url
             if guid_value:
                 combined = f"{podcast_id}{guid_value}"
-                hash_bytes = hashlib.md5(combined.encode('utf-8')).digest()
-                episode_id = str(uuid.UUID(bytes=hash_bytes))
+                episode_id = hashlib.md5(combined.encode('utf-8')).hexdigest()
             else:
                 episode_id = None
         else:

@@ -5,7 +5,6 @@ import email.utils
 from time import mktime
 import time
 import hashlib
-import uuid
 import json
 from .item import Item
 import logging
@@ -229,10 +228,9 @@ class Podcast():
         - updated_at: Unix timestamp (current time)
         - extras: JSONB dict containing all other metadata and namespaces
         """
-        # Generate deterministic UUID from MD5 hash of feed_url
+        # Generate deterministic ID from MD5 hex of feed_url
         if self.feed_url:
-            hash_bytes = hashlib.md5(self.feed_url.encode('utf-8')).digest()
-            podcast_id = str(uuid.UUID(bytes=hash_bytes))
+            podcast_id = hashlib.md5(self.feed_url.encode('utf-8')).hexdigest()
         else:
             podcast_id = None
 
