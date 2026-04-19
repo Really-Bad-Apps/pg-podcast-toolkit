@@ -176,32 +176,45 @@ class Podcast():
 
     def to_dict(self):
         podcast_dict = {}
-        podcast_dict['copyright'] = self.copyright
-        podcast_dict['description'] = self.description
-        podcast_dict['image_url'] = self.image_url
-        podcast_dict['image_link'] = self.image_link
-        podcast_dict['items'] = []
-        for item in self.items:
-            item_dict = item.to_dict()
-            podcast_dict['items'].append(item_dict)
-        podcast_dict['itunes_author_name'] = self.itunes_author_name
-        podcast_dict['itunes_block'] = self.itunes_block
-        podcast_dict['itunes_categories'] = self.itunes_categories
-        podcast_dict['itunes_block'] = self.itunes_block
-        podcast_dict['itunes_complete'] = self.image_width
-        podcast_dict['itunes_explicit'] = self.itunes_explicit
-        podcast_dict['itunes_image'] = self.itunes_image
-        podcast_dict['itunes_explicit'] = self.itunes_explicit
-        podcast_dict['itunes_new_feed_url'] = self.itunes_new_feed_url
-        podcast_dict['language'] = self.language
-        podcast_dict['last_build_date'] = self.last_build_date
-        podcast_dict['link'] = self.link
-        podcast_dict['published_date'] = self.published_date
-        podcast_dict['owner_name'] = self.owner_name
-        podcast_dict['owner_email'] = self.owner_email
-        podcast_dict['subtitle'] = self.subtitle
-        podcast_dict['title'] = self.title
-        podcast_dict['type'] = self.type
+        podcast_dict['copyright'] = getattr(self, 'copyright', None)
+        podcast_dict['description'] = getattr(self, 'description', None)
+        podcast_dict['image_url'] = getattr(self, 'image_url', None)
+        podcast_dict['image_link'] = getattr(self, 'image_link', None)
+        items_list = getattr(self, 'items', None)
+        if items_list is None:
+            podcast_dict['items'] = None
+        else:
+            podcast_dict['items'] = []
+            for item in items_list:
+                podcast_dict['items'].append(item.to_dict())
+        podcast_dict['itunes_author_name'] = getattr(self, 'itunes_author_name', None)
+        podcast_dict['itunes_block'] = getattr(self, 'itunes_block', None)
+        podcast_dict['itunes_categories'] = getattr(self, 'itunes_categories', None)
+        podcast_dict['itunes_complete'] = getattr(self, 'itunes_complete', None)
+        podcast_dict['itunes_explicit'] = getattr(self, 'itunes_explicit', None)
+        podcast_dict['itunes_image'] = getattr(self, 'itunes_image', None)
+        podcast_dict['itunes_new_feed_url'] = getattr(self, 'itunes_new_feed_url', None)
+        podcast_dict['language'] = getattr(self, 'language', None)
+        podcast_dict['last_build_date'] = getattr(self, 'last_build_date', None)
+        podcast_dict['link'] = getattr(self, 'link', None)
+        podcast_dict['published_date'] = getattr(self, 'published_date', None)
+        podcast_dict['owner_name'] = getattr(self, 'owner_name', None)
+        podcast_dict['owner_email'] = getattr(self, 'owner_email', None)
+        podcast_dict['subtitle'] = getattr(self, 'subtitle', None)
+        podcast_dict['title'] = getattr(self, 'title', None)
+        podcast_dict['type'] = getattr(self, 'type', None)
+
+        # DB-column fields (populated on Podcast objects restored from a database row)
+        podcast_dict['id'] = getattr(self, 'id', None)
+        podcast_dict['podcast_guid'] = getattr(self, 'podcast_guid', None)
+        podcast_dict['itunes_id'] = getattr(self, 'itunes_id', None)
+        podcast_dict['feed_url'] = getattr(self, 'feed_url', None)
+        podcast_dict['etag'] = getattr(self, 'etag', None)
+        podcast_dict['last_modified'] = getattr(self, 'last_modified', None)
+        podcast_dict['last_fetched_at'] = getattr(self, 'last_fetched_at', None)
+        podcast_dict['created_at'] = getattr(self, 'created_at', None)
+        podcast_dict['updated_at'] = getattr(self, 'updated_at', None)
+        podcast_dict['extras'] = getattr(self, 'extras', None)
         return podcast_dict
 
     def to_db_record(self, etag=None, last_modified=None, last_fetched_at=None):
