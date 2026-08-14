@@ -24,3 +24,4 @@ keys/
 dist/
 main.py
 pyvenv.cfg
+.mcp.json
