@@ -232,11 +232,11 @@ class Item(object):
         Returns a dict structured for database insertion matching schema.sql episodes table.
 
         Args:
-            podcast_id: UUID of the parent podcast (required for deterministic episode ID generation)
+            podcast_id: 32-char MD5 hex ID of the parent podcast (required for deterministic episode ID generation)
 
         Returns dict with keys matching episodes database schema:
-        - id: UUID string (MD5 hash of podcast_id || guid)
-        - podcast_id: UUID of parent podcast
+        - id: 32-char lowercase MD5 hex string of podcast_id || guid (hexdigest, NOT a hyphenated UUID)
+        - podcast_id: 32-char MD5 hex ID of parent podcast
         - guid: Episode GUID
         - title: Episode title
         - description: Episode description

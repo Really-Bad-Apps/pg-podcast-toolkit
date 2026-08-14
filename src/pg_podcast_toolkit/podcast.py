@@ -227,7 +227,7 @@ class Podcast():
             last_fetched_at: Unix timestamp of fetch time (optional, defaults to current time)
 
         Returns dict with keys matching database schema:
-        - id: UUID string (MD5 hash of feed_url converted to UUID format)
+        - id: 32-char lowercase MD5 hex string of feed_url (hexdigest, NOT a hyphenated UUID)
         - podcast_guid: UUID string from podcast:guid if present
         - title: Podcast title
         - feed_url: RSS feed URL

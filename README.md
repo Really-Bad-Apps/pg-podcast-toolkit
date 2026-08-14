@@ -7,7 +7,7 @@ Tools for parsing and managing Podcasting 2.0 RSS feeds with automatic namespace
 - **Podcasting 2.0 Support** - Automatically captures all podcast:* namespace tags without parser updates
 - **Database-Ready Output** - Built-in `to_db_record()` methods for PostgreSQL schema alignment
 - **Backward Compatible** - Existing code continues to work, new features are opt-in
-- **Deterministic IDs** - MD5-based UUID generation for podcasts and episodes
+- **Deterministic IDs** - MD5-based ID generation (32-char lowercase hex strings) for podcasts and episodes
 - **GUID Fallback** - Handles episodes with missing GUIDs gracefully
 - **Comprehensive Parsing** - Supports RSS 2.0, iTunes extensions, and custom namespaces
 
@@ -98,7 +98,7 @@ for item in podcast.items:
 
 - **Automatic Namespace Capture** - No parser updates needed for new Podcasting 2.0 tags
 - **Database-Ready Methods** - `Podcast.to_db_record()` and `Item.to_db_record()`
-- **Schema Alignment** - Output matches PostgreSQL schema with UUID primary keys
+- **Schema Alignment** - Output matches PostgreSQL schema with MD5 hex string primary keys
 - **GUID Fallback** - Episodes without GUIDs use `enclosure_url` for ID generation
 - **100% Backward Compatible** - All existing attributes and methods unchanged
 
