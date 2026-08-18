@@ -6,7 +6,7 @@ from time import mktime
 import time
 import hashlib
 import json
-from .item import Item, tag_text
+from .item import Item, tag_html_content, tag_text
 import logging
 
 class InvalidPodcastFeed(ValueError):
@@ -34,7 +34,9 @@ class Podcast():
 
     Attributes:
         feed_content (str): The actual xml of the feed
-        soup (bs4.BeautifulSoup): A soup of the xml with items and image removed
+        soup (None): Only used during parsing; released (set to None) once
+            __init__ completes so retained Podcast objects don't pin the
+            parse tree in memory
         copyright (str): The feed's copyright
         items (item): Item objects
         description (str): The feed's description
@@ -346,9 +348,9 @@ class Podcast():
             self.copyright = None
 
     def set_description(self, tag):
-        """Parses description and sets value"""
+        """Parses description, preserving HTML content, and sets value"""
         try:
-            self.description = tag_text(tag)
+            self.description = tag_html_content(tag)
         except AttributeError:
             self.description = None
 
@@ -458,16 +460,16 @@ class Podcast():
             self.owner_email = None
 
     def set_subtitle(self, tag):
-        """Parses subtitle and sets value"""
+        """Parses subtitle, preserving HTML content, and sets value"""
         try:
-            self.subtitle = tag_text(tag)
+            self.subtitle = tag_html_content(tag)
         except AttributeError:
             self.subtitle = None
 
     def set_summary(self, tag):
-        """Parses summary and set value"""
+        """Parses summary, preserving HTML content, and sets value"""
         try:
-            self.summary = tag_text(tag)
+            self.summary = tag_html_content(tag)
         except AttributeError:
             self.summary = None
 

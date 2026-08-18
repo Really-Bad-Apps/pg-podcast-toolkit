@@ -26,6 +26,23 @@ def tag_text(tag: Optional[Tag]) -> Optional[str]:
     return str(value)
 
 
+def tag_html_content(tag: Tag) -> Optional[str]:
+    """Return a tag's content preserving any inner HTML markup, detached.
+
+    Uses the tag's single text/CDATA node when that is all it holds. Falls
+    back to the serialized inner HTML when the tag contains child elements
+    (Tag.string would recurse into a lone child and strip its markup) or
+    multiple text nodes. Returns None for an empty tag.
+    """
+    if tag.find(True, recursive=False) is not None:
+        return tag.decode_contents()
+    value = tag_text(tag)
+    if value is None and tag.contents:
+        # Multiple text/CDATA nodes that Tag.string won't join
+        value = tag.decode_contents()
+    return value
+
+
 # parse time formats in hh:mm:ss strings into actual seconds
 def parse_hms(hms):
 
@@ -79,6 +96,10 @@ class Item(object):
 
     Note:
         All attributes with empty or nonexistent element will have a value of None
+
+        The soup argument is only used during parsing; self.soup is released
+        (set to None) once __init__ completes so retained Item objects don't
+        pin the feed's parse tree in memory.
 
     Attributes:
         author (str): The author of the item
@@ -363,17 +384,9 @@ class Item(object):
     def set_description(self, tag):
         """Parses description, preserves HTML content, and checks size."""
         try:
-            if tag.find(True, recursive=False) is not None:
-                # Node contains child elements rather than text/CDATA nodes;
-                # take the inner HTML without the <description> wrapper.
-                # (tag_text can't be used here: bs4's Tag.string recurses into
-                # a lone child element and would strip its markup.)
-                description_content = tag.decode_contents()
-            else:
-                description_content = tag_text(tag)
-                if description_content is None:
-                    # Empty node, or multiple text nodes tag.string won't join
-                    description_content = tag.decode_contents()
+            description_content = tag_html_content(tag)
+            if description_content is None:
+                description_content = ''
             max_bytes = 65536  # Maximum allowed bytes for the description
             
             # Check the byte length of the description content
@@ -389,9 +402,9 @@ class Item(object):
             self.description = None
 
     def set_content_encoded(self, tag):
-        """Parses content_encoded and set value."""
+        """Parses content_encoded, preserving HTML content, and sets value."""
         try:
-            self.content_encoded = tag_text(tag)
+            self.content_encoded = tag_html_content(tag)
         except AttributeError:
             self.content_encoded = None
 
