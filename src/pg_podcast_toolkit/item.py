@@ -337,13 +337,20 @@ class Item(object):
     def set_description(self, tag):
         """Parses description, preserves HTML content, and checks size."""
         try:
-            description_content = str(tag)
+            if tag.string is not None:
+                # str() detaches the value from the NavigableString so the
+                # parse tree isn't pinned in memory via a parent reference.
+                description_content = str(tag.string)
+            else:
+                # Node contains child elements rather than a single text/CDATA
+                # node; take the inner HTML without the <description> wrapper.
+                description_content = tag.decode_contents()
             max_bytes = 65536  # Maximum allowed bytes for the description
             
             # Check the byte length of the description content
             if len(description_content.encode('utf-8')) > max_bytes:
                 # If the description exceeds the limit, replace it with a placeholder
-                logging.info("Episode description exceeds maximum length, removing content from parent feed at {self.feed_url}")
+                logging.info(f"Episode description exceeds maximum length, removing content from parent feed at {self.feed_url}")
                 self.description = "description overflow, removed"
             else:
                 # If within the limit, use the description as is
