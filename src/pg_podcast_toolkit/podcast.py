@@ -6,7 +6,7 @@ from time import mktime
 import time
 import hashlib
 import json
-from .item import Item
+from .item import Item, tag_text
 import logging
 
 class InvalidPodcastFeed(ValueError):
@@ -115,6 +115,9 @@ class Podcast():
             ('itunes', 'summary'): self.set_summary,
         }
         many_tag_methods = set([ (None, 'item'), ('itunes', 'category')])
+        # Snapshot before the pop-loop below empties tag_methods; the second
+        # pass needs the full set to know which tags were standard ones.
+        known_tags = set(tag_methods)
 
         try:
             channel = self.soup.rss.channel
@@ -143,14 +146,18 @@ class Podcast():
             if not isinstance(c, Tag):
                 continue
             tag_tuple = (c.prefix, c.name)
-            # Skip if already handled or is an item
-            if tag_tuple in tag_methods or tag_tuple == (None, 'item') or tag_tuple in many_tag_methods:
+            # Skip standard tags handled (or handleable) by the first pass
+            if tag_tuple in known_tags:
                 continue
             self._capture_unknown_tag(c)
 
         if not self.items:
             for item in self.soup.find_all('item'):
                 self.add_item(item)
+
+        # Parsing is done; drop the tree so retained Podcast/Item objects
+        # don't pin the whole parsed document in memory.
+        self.soup = None
 
         self.set_time_published()
         self.set_dates_published()
@@ -334,44 +341,45 @@ class Podcast():
     def set_copyright(self, tag):
         """Parses copyright and set value"""
         try:
-            self.copyright = tag.string
+            self.copyright = tag_text(tag)
         except AttributeError:
             self.copyright = None
 
     def set_description(self, tag):
         """Parses description and sets value"""
         try:
-            self.description = tag.string
+            self.description = tag_text(tag)
         except AttributeError:
             self.description = None
 
     def set_image(self, tag):
         """Parses image element and set values"""
         try:
-            self.image_url = tag.find('url', recursive=False).string
+            self.image_url = tag_text(tag.find('url', recursive=False))
         except AttributeError:
             self.image_url = None
 
     def set_itunes_author_name(self, tag):
         """Parses author name from itunes tags and sets value"""
         try:
-            self.itunes_author_name = tag.string
+            self.itunes_author_name = tag_text(tag)
         except AttributeError:
             self.itunes_author_name = None
 
     def set_itunes_type(self, tag):
         """Parses the type of show and sets value"""
         try:
-            self.itunes_type = tag.string
+            self.itunes_type = tag_text(tag)
         except AttributeError:
             self.itunes_type = None
 
     def set_itunes_block(self, tag):
         """Check and see if podcast is blocked from iTunes and sets value"""
-        try:
-            block = tag.string.lower()
-        except AttributeError:
+        block = tag_text(tag)
+        if block is None:
             block = ""
+        else:
+            block = block.lower()
         if block == "yes":
             self.itunes_block = True
         else:
@@ -384,17 +392,17 @@ class Podcast():
 
     def set_itunes_complete(self, tag):
         """Parses complete from itunes tags and sets value"""
-        try:
-            self.itunes_complete = tag.string.lower()
-        except AttributeError:
-            self.itunes_complete = None
+        value = tag_text(tag)
+        if value is not None:
+            value = value.lower()
+        self.itunes_complete = value
 
     def set_itunes_explicit(self, tag):
         """Parses explicit from itunes tags and sets value"""
-        try:
-            self.itunes_explicit = tag.string.lower()
-        except AttributeError:
-            self.itunes_explicit = None
+        value = tag_text(tag)
+        if value is not None:
+            value = value.lower()
+        self.itunes_explicit = value
 
     def set_itunes_image(self, tag):
         """Parses itunes images and set url as value"""
@@ -406,60 +414,60 @@ class Podcast():
     def set_itunes_new_feed_url(self, tag):
         """Parses new feed url from itunes tags and sets value"""
         try:
-            self.itunes_new_feed_url = tag.string
+            self.itunes_new_feed_url = tag_text(tag)
         except AttributeError:
             self.itunes_new_feed_url = None
 
     def set_language(self, tag):
         """Parses feed language and set value"""
         try:
-            self.language = tag.string
+            self.language = tag_text(tag)
         except AttributeError:
             self.language = None
 
     def set_last_build_date(self, tag):
         """Parses last build date and set value"""
         try:
-            self.last_build_date = tag.string
+            self.last_build_date = tag_text(tag)
         except AttributeError:
             self.last_build_date = None
 
     def set_link(self, tag):
         """Parses link to homepage and set value"""
         try:
-            self.link = tag.string
+            self.link = tag_text(tag)
         except AttributeError:
             self.link = None
 
     def set_published_date(self, tag):
         """Parses published date and set value"""
         try:
-            self.published_date = tag.string
+            self.published_date = tag_text(tag)
         except AttributeError:
             self.published_date = None
 
     def set_owner(self, tag):
         """Parses owner name and email then sets value"""
         try:
-            self.owner_name = tag.find('itunes:name', recursive=False).string
+            self.owner_name = tag_text(tag.find('itunes:name', recursive=False))
         except AttributeError:
             self.owner_name = None
         try:
-            self.owner_email = tag.find('itunes:email', recursive=False).string
+            self.owner_email = tag_text(tag.find('itunes:email', recursive=False))
         except AttributeError:
             self.owner_email = None
 
     def set_subtitle(self, tag):
         """Parses subtitle and sets value"""
         try:
-            self.subtitle = tag.string
+            self.subtitle = tag_text(tag)
         except AttributeError:
             self.subtitle = None
 
     def set_summary(self, tag):
         """Parses summary and set value"""
         try:
-            self.summary = tag.string
+            self.summary = tag_text(tag)
         except AttributeError:
             self.summary = None
 
@@ -479,8 +487,9 @@ class Podcast():
             tag_data['attributes'] = dict(tag.attrs)
 
         # Get tag text content
-        if tag.string:
-            tag_data['value'] = tag.string
+        value = tag_text(tag)
+        if value:
+            tag_data['value'] = value
         elif tag.get_text(strip=True):
             tag_data['value'] = tag.get_text(strip=True)
 
@@ -497,6 +506,6 @@ class Podcast():
     def set_title(self, tag):
         """Parses title and set value"""
         try:
-            self.title = tag.string
+            self.title = tag_text(tag)
         except AttributeError:
             self.title = None

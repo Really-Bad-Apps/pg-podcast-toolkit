@@ -1,4 +1,5 @@
 from datetime import datetime, date
+from typing import Optional
 import email.utils
 from time import mktime
 from bs4 import Tag
@@ -6,6 +7,24 @@ import hashlib
 import time
 import json
 import logging
+
+
+def tag_text(tag: Optional[Tag]) -> Optional[str]:
+    """Return a tag's text via bs4's Tag.string, detached as a plain str.
+
+    Tag.string is None when the tag holds multiple children (though bs4
+    recurses into a lone child element). It returns a NavigableString whose
+    parent reference keeps the whole parsed document alive; str() copies just
+    the text so the tree can be GC'd. Accepts None so callers can pass
+    tag.find(...) results straight through.
+    """
+    if tag is None:
+        return None
+    value = tag.string
+    if value is None:
+        return None
+    return str(value)
+
 
 # parse time formats in hh:mm:ss strings into actual seconds
 def parse_hms(hms):
@@ -136,6 +155,9 @@ class Item(object):
             ('itunes', 'subtitle'): self.set_itunes_subtitle,
             ('itunes', 'summary'): self.set_itunes_summary,
         }
+        # Snapshot before the pop-loop below empties tag_methods; the second
+        # pass needs the full set to know which tags were standard ones.
+        known_tags = set(tag_methods)
 
         # Populate attributes based on feed content
         for c in self.soup.children:
@@ -154,10 +176,14 @@ class Item(object):
             if not isinstance(c, Tag):
                 continue
             tag_tuple = (c.prefix, c.name)
-            # Skip if already handled
-            if tag_tuple in tag_methods:
+            # Skip standard tags handled (or handleable) by the first pass
+            if tag_tuple in known_tags:
                 continue
             self._capture_unknown_tag(c)
+
+        # Parsing is done; drop the tag so a retained Item doesn't pin the
+        # whole parsed document in memory via its parent references.
+        self.soup = None
 
         self.set_time_published()
         self.set_dates_published()
@@ -330,21 +356,24 @@ class Item(object):
     def set_author(self, tag):
         """Parses author and set value."""
         try:
-            self.author = tag.string
+            self.author = tag_text(tag)
         except AttributeError:
             self.author = None
 
     def set_description(self, tag):
         """Parses description, preserves HTML content, and checks size."""
         try:
-            if tag.string is not None:
-                # str() detaches the value from the NavigableString so the
-                # parse tree isn't pinned in memory via a parent reference.
-                description_content = str(tag.string)
-            else:
-                # Node contains child elements rather than a single text/CDATA
-                # node; take the inner HTML without the <description> wrapper.
+            if tag.find(True, recursive=False) is not None:
+                # Node contains child elements rather than text/CDATA nodes;
+                # take the inner HTML without the <description> wrapper.
+                # (tag_text can't be used here: bs4's Tag.string recurses into
+                # a lone child element and would strip its markup.)
                 description_content = tag.decode_contents()
+            else:
+                description_content = tag_text(tag)
+                if description_content is None:
+                    # Empty node, or multiple text nodes tag.string won't join
+                    description_content = tag.decode_contents()
             max_bytes = 65536  # Maximum allowed bytes for the description
             
             # Check the byte length of the description content
@@ -362,7 +391,7 @@ class Item(object):
     def set_content_encoded(self, tag):
         """Parses content_encoded and set value."""
         try:
-            self.content_encoded = tag.string
+            self.content_encoded = tag_text(tag)
         except AttributeError:
             self.content_encoded = None
 
@@ -385,58 +414,59 @@ class Item(object):
     def set_guid(self, tag):
         """Parses guid and set value"""
         try:
-            self.guid = tag.string
+            self.guid = tag_text(tag)
         except AttributeError:
             self.guid = None
 
     def set_published_date(self, tag):
         """Parses published date and set value."""
         try:
-            self.published_date = tag.string
+            self.published_date = tag_text(tag)
         except AttributeError:
             self.published_date = None
 
     def set_title(self, tag):
         """Parses title and set value."""
         try:
-            self.title = tag.string
+            self.title = tag_text(tag)
         except AttributeError:
             self.title = None
 
     def set_itunes_author_name(self, tag):
         """Parses author name from itunes tags and sets value"""
         try:
-            self.itunes_author_name = tag.string
+            self.itunes_author_name = tag_text(tag)
         except AttributeError:
             self.itunes_author_name = None
 
     def set_itunes_episode(self, tag):
         """Parses the episode number and sets value"""
         try:
-            self.itunes_episode = tag.string
+            self.itunes_episode = tag_text(tag)
         except AttributeError:
             self.itunes_episode = None
 
     def set_itunes_season(self, tag):
         """Parses the episode season and sets value"""
         try:
-            self.itunes_season = tag.string
+            self.itunes_season = tag_text(tag)
         except AttributeError:
             self.itunes_season = None
 
     def set_itunes_episode_type(self, tag):
         """Parses the episode type and sets value"""
         try:
-            self.itunes_episode_type = tag.string
+            self.itunes_episode_type = tag_text(tag)
         except AttributeError:
             self.itunes_episode_type = None
 
     def set_itunes_block(self, tag):
         """Check and see if item is blocked from iTunes and sets value"""
-        try:
-            block = tag.string.lower()
-        except AttributeError:
+        block = tag_text(tag)
+        if block is None:
             block = ""
+        else:
+            block = block.lower()
         if block == "yes":
             self.itunes_block = True
         else:
@@ -444,19 +474,19 @@ class Item(object):
 
     def set_itunes_duration(self, tag):
         """Parses duration from itunes tags and sets value"""
+        value = tag_text(tag)
         try:
-            self.itunes_duration = parse_hms(tag.string)
+            self.itunes_duration = parse_hms(value)
         except Exception:
-            logging.warning(f"Error parsing itunes duration {tag.string}")
+            logging.warning(f"Error parsing itunes duration {value}")
             self.itunes_duration = None
 
     def set_itunes_explicit(self, tag):
         """Parses explicit from itunes item tags and sets value"""
-        try:
-            self.itunes_explicit = tag.string
-            self.itunes_explicit = self.itunes_explicit.lower()
-        except AttributeError:
-            self.itunes_explicit = None
+        value = tag_text(tag)
+        if value is not None:
+            value = value.lower()
+        self.itunes_explicit = value
 
     def set_itunes_image(self, tag):
         """Parses itunes item images and set url as value"""
@@ -467,23 +497,22 @@ class Item(object):
 
     def set_itunes_order(self, tag):
         """Parses episode order and set url as value"""
-        try:
-            self.itunes_order = tag.string
-            self.itunes_order = self.itunes_order.lower()
-        except AttributeError:
-            self.itunes_order = None
+        value = tag_text(tag)
+        if value is not None:
+            value = value.lower()
+        self.itunes_order = value
 
     def set_itunes_subtitle(self, tag):
         """Parses subtitle from itunes tags and sets value"""
         try:
-            self.itunes_subtitle = tag.string
+            self.itunes_subtitle = tag_text(tag)
         except AttributeError:
             self.itunes_subtitle = None
 
     def set_itunes_summary(self, tag):
         """Parses summary from itunes tags and sets value"""
         try:
-            self.itunes_summary = tag.string
+            self.itunes_summary = tag_text(tag)
         except AttributeError:
             self.itunes_summary = None
 
@@ -503,8 +532,9 @@ class Item(object):
             tag_data['attributes'] = dict(tag.attrs)
 
         # Get tag text content
-        if tag.string:
-            tag_data['value'] = tag.string
+        value = tag_text(tag)
+        if value:
+            tag_data['value'] = value
         elif tag.get_text(strip=True):
             tag_data['value'] = tag.get_text(strip=True)
 

@@ -58,6 +58,15 @@ def test_description_with_child_elements_falls_back_to_inner_html():
     assert podcast.items[0].description == 'Intro <b>bold</b> outro'
 
 
+def test_description_with_single_child_element_preserves_markup():
+    # bs4's Tag.string recurses into a lone child element; the parser must
+    # not let that strip the markup (HiveMake ticket 15369e5e review).
+    feed = build_feed('<description><p>Only paragraph</p></description>')
+    podcast = Podcast(feed, feed_url='https://example.com/feed.xml')
+
+    assert podcast.items[0].description == '<p>Only paragraph</p>'
+
+
 def test_missing_description_is_none():
     feed = build_feed('')
     podcast = Podcast(feed, feed_url='https://example.com/feed.xml')
