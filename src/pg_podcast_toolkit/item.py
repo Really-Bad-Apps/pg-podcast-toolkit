@@ -1,5 +1,5 @@
 from datetime import datetime, date
-from typing import Optional
+from typing import Optional, Union
 import email.utils
 from time import mktime
 from bs4 import Tag
@@ -41,6 +41,44 @@ def tag_html_content(tag: Tag) -> Optional[str]:
         # Multiple text/CDATA nodes that Tag.string won't join
         value = tag.decode_contents()
     return value
+
+
+# Plausibility ceilings for integers a publisher can type freely into their
+# hosting UI. These are parser-level bounds on what the field actually models,
+# deliberately not tied to any consumer's storage type: the problem with
+# <itunes:episode>445544554455</itunes:episode> is not that it overflows an
+# INT4 column somewhere downstream, it's that it isn't an episode number.
+MAX_EPISODE_NUMBER = 999999
+MAX_SEASON_NUMBER = 999999
+MAX_DURATION_SECONDS = 30 * 24 * 60 * 60  # 30 days
+
+
+def bounded_int(value: Optional[Union[str, int]], max_value: int, field_name: str,
+                feed_url: Optional[str] = None) -> Optional[int]:
+    """Parse an int, returning None for absent, non-numeric or implausible input.
+
+    None rather than 0 or a clamp to max_value: both of those invent a fact the
+    publisher never asserted, and would sort, compare and display as if they
+    had. None says "this item has no usable value for this field", which is
+    what is actually true.
+    """
+    if isinstance(value, str):
+        value = value.strip()
+
+    if value is None or value == '':
+        return None
+
+    try:
+        parsed = int(value)
+    except (ValueError, TypeError):
+        logging.warning(f"Dropping non-numeric {field_name} {value!r} from feed at {feed_url}")
+        return None
+
+    if parsed < 0 or parsed > max_value:
+        logging.warning(f"Dropping implausible {field_name} {parsed} (bound {max_value}) from feed at {feed_url}")
+        return None
+
+    return parsed
 
 
 # parse time formats in hh:mm:ss strings into actual seconds
@@ -318,20 +356,24 @@ class Item(object):
         if self.itunes_explicit:
             explicit = self.itunes_explicit.lower() in ('yes', 'true', '1')
 
-        # Extract episode_number and season_number from itunes tags
-        episode_number = None
-        if self.itunes_episode:
-            try:
-                episode_number = int(self.itunes_episode)
-            except (ValueError, TypeError):
-                pass
+        # Extract episode_number and season_number from itunes tags. Publishers
+        # mash the keyboard into these fields on items they don't feel like
+        # numbering, so bound them rather than passing the garbage downstream.
+        episode_number = bounded_int(
+            self.itunes_episode, MAX_EPISODE_NUMBER, 'itunes:episode', self.feed_url)
+        season_number = bounded_int(
+            self.itunes_season, MAX_SEASON_NUMBER, 'itunes:season', self.feed_url)
 
-        season_number = None
-        if self.itunes_season:
-            try:
-                season_number = int(self.itunes_season)
-            except (ValueError, TypeError):
-                pass
+        # parse_hms returns -1 for absent/zero durations. Normalise that
+        # sentinel to None *before* bounding: a <itunes:duration>0</itunes:duration>
+        # is a routine feed condition, not an implausible value, and feeding
+        # the -1 to bounded_int would log a misleading warning per item.
+        # parse_hms itself keeps its -1 contract for to_dict and direct callers.
+        raw_duration = self.itunes_duration
+        if raw_duration == -1:
+            raw_duration = None
+        duration_seconds = bounded_int(
+            raw_duration, MAX_DURATION_SECONDS, 'itunes:duration', self.feed_url)
 
         # Build extras dict with all other metadata
         extras = {
@@ -357,7 +399,7 @@ class Item(object):
             'description': self.description,
             'image_url': self.itunes_image,
             'publish_date': self.time_published,
-            'duration_seconds': self.itunes_duration,
+            'duration_seconds': duration_seconds,
             'episode_number': episode_number,
             'season_number': season_number,
             'episode_type': self.itunes_episode_type,
