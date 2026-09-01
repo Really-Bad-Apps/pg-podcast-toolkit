@@ -70,7 +70,14 @@ MAX_EPISODE_NUMBER = 2_100_000_000
 MAX_SEASON_NUMBER = 999999
 
 MAX_DURATION_SECONDS = 30 * 24 * 60 * 60  # 30 days
-MAX_ENCLOSURE_BYTES = 10 * 1024 ** 3  # 10 GiB
+# Deliberately loose. This exists to reject a byte count no publisher meant
+# (the reported case was a 19-digit 4455445544554455445), not to express an
+# opinion about how large a podcast file ought to be. A long 4K video episode
+# can legitimately run tens of GiB, and clipping one to None to save a few
+# digits of headroom would repeat exactly the mistake 4f862bc7 documents: an
+# unjustified ceiling silently discarding real data. 1 TiB is still seven
+# orders of magnitude below the observed garbage.
+MAX_ENCLOSURE_BYTES = 1024 ** 4  # 1 TiB
 
 
 def bounded_int(value: Optional[Union[str, int]], max_value: int, field_name: str,

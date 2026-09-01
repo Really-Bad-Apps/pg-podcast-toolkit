@@ -220,9 +220,30 @@ def test_implausible_enclosure_size_is_dropped():
 
 
 def test_non_numeric_enclosure_size_is_dropped():
+    # Note the drop happens upstream of bounded_int: set_enclosure's bare
+    # except already nulls a non-numeric length="", so this asserts the end
+    # state only and would pass with the to_db_record bound removed. The
+    # bound's own handling of non-numeric input is pinned directly below;
+    # unlike itunes:episode, a non-numeric enclosure length is dropped
+    # without a warning log because bounded_int never sees it.
     assert build_record_with_enclosure('unknown')['enclosure_size'] is None
+    assert bounded_int('unknown', MAX_ENCLOSURE_BYTES, 'enclosure length') is None
 
 
 def test_enclosure_bound_is_inclusive():
     assert bounded_int(str(MAX_ENCLOSURE_BYTES), MAX_ENCLOSURE_BYTES, 'enclosure length') == MAX_ENCLOSURE_BYTES
     assert bounded_int(str(MAX_ENCLOSURE_BYTES + 1), MAX_ENCLOSURE_BYTES, 'enclosure length') is None
+
+
+def test_large_video_enclosure_survives():
+    # A long-form 4K video episode can legitimately run tens of GiB. The
+    # ceiling exists to reject byte counts no publisher meant, not to have
+    # an opinion about file size — see 4f862bc7 for what the tighter kind
+    # of bound cost us.
+    forty_gib = str(40 * 1024 ** 3)
+    assert build_record_with_enclosure(forty_gib)['enclosure_size'] == int(forty_gib)
+
+
+def test_enclosure_bound_still_rejects_reported_garbage():
+    # The 19-digit value from dc0e9231 stays well above the ceiling.
+    assert 4455445544554455445 > MAX_ENCLOSURE_BYTES
