@@ -48,9 +48,29 @@ def tag_html_content(tag: Tag) -> Optional[str]:
 # deliberately not tied to any consumer's storage type: the problem with
 # <itunes:episode>445544554455</itunes:episode> is not that it overflows an
 # INT4 column somewhere downstream, it's that it isn't an episode number.
-MAX_EPISODE_NUMBER = 999999
+#
+# MAX_EPISODE_NUMBER is NOT a count of episodes. Publishers routinely encode
+# other things in <itunes:episode>, and all of these are deliberate schemes
+# observed in production feeds:
+#
+#   20260901      YYYYMMDD                  (Megaphone, NBC News)
+#   2026040110    YYYYMMDD + hour           (NBC News)
+#   10000001..33  an offset range           (PodPlay)
+#
+# The largest legitimate value observed is ~2.03e9 (YYYYMMDDHH), while the
+# smallest keyboard-mash value observed is 4848484848 (~4.8e9), so the bound
+# sits between them. That it lands near INT32 max is a coincidence of where
+# the real data falls, NOT the reasoning — do not "simplify" this to an INT32
+# check, and do not lower it back toward an episode-count-shaped number.
+# An earlier 999999 did exactly that and discarded every episode number on
+# four mainstream shows (ticket 4f862bc7).
+MAX_EPISODE_NUMBER = 2_100_000_000
+
+# Seasons carry no such encoding convention — no date-based seasons observed.
 MAX_SEASON_NUMBER = 999999
+
 MAX_DURATION_SECONDS = 30 * 24 * 60 * 60  # 30 days
+MAX_ENCLOSURE_BYTES = 10 * 1024 ** 3  # 10 GiB
 
 
 def bounded_int(value: Optional[Union[str, int]], max_value: int, field_name: str,
@@ -375,6 +395,9 @@ class Item(object):
         duration_seconds = bounded_int(
             raw_duration, MAX_DURATION_SECONDS, 'itunes:duration', self.feed_url)
 
+        enclosure_size = bounded_int(
+            self.enclosure_length, MAX_ENCLOSURE_BYTES, 'enclosure length', self.feed_url)
+
         # Build extras dict with all other metadata
         extras = {
             'author': self.author,
@@ -406,7 +429,7 @@ class Item(object):
             'explicit': explicit,
             'enclosure_url': self.enclosure_url,
             'enclosure_type': self.enclosure_type,
-            'enclosure_size': self.enclosure_length,
+            'enclosure_size': enclosure_size,
             'created_at': current_time,
             'updated_at': current_time,
             'extras': json.dumps(extras)

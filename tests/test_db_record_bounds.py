@@ -11,6 +11,7 @@ import pytest
 
 from pg_podcast_toolkit.item import (
     MAX_DURATION_SECONDS,
+    MAX_ENCLOSURE_BYTES,
     MAX_EPISODE_NUMBER,
     MAX_SEASON_NUMBER,
     bounded_int,
@@ -59,16 +60,42 @@ def test_keyboard_mash_episode_is_dropped():
     assert record['episode_number'] is None
 
 
+# Every 7+ digit <itunes:episode> in anchor.fm/s/ad3c2ba4/podcast/rss is
+# keyboard-mash. Only the four above the bound are actually rejected; see
+# test_mash_below_the_bound_is_admitted for the eleven that are not, and why.
+
 @pytest.mark.parametrize('value', [
     '10999999999', '445544554455', '45454545454', '4848484848',
+])
+def test_observed_garbage_above_the_bound_is_dropped(value):
+    record = build_record(f'<itunes:episode>{value}</itunes:episode>')
+    assert record['episode_number'] is None
+
+
+@pytest.mark.parametrize('value', [
     '484848484', '494949494', '499499499', '474747474',
     '49494949', '4999999', '4555555', '4455555',
     '123456789', '454546789', '45678910',
 ])
-def test_observed_garbage_values_are_dropped(value):
-    # Every 7+ digit <itunes:episode> in anchor.fm/s/ad3c2ba4/podcast/rss.
+def test_mash_below_the_bound_is_admitted(value):
+    """Documents a deliberate limitation, not desired behaviour.
+
+    These are known keyboard-mash from the feed in ticket 784e03a5, and a
+    magnitude bound cannot reject them: 494949494 is indistinguishable in
+    size from Anchor's legitimate 156556622, and 45678910 from a YYYYMMDD.
+    Rejecting them would mean discarding real episode numbers, which is the
+    regression ticket 4f862bc7 was filed about.
+
+    What matters is that none of them can overflow an INT4 column, so the
+    incident that started this class of bug cannot recur through them. They
+    are wrong episode numbers, not destructive ones.
+
+    If this test starts failing, someone has narrowed the bound — check
+    4f862bc7 before assuming that is an improvement.
+    """
     record = build_record(f'<itunes:episode>{value}</itunes:episode>')
-    assert record['episode_number'] is None
+    assert record['episode_number'] == int(value)
+    assert record['episode_number'] < 2 ** 31 - 1
 
 
 def test_garbage_season_is_dropped():
@@ -142,3 +169,60 @@ def test_zero_episode_is_not_confused_with_absent():
 
 def test_negative_values_are_dropped():
     assert bounded_int('-1', MAX_EPISODE_NUMBER, 'itunes:episode') is None
+
+
+# --- Legitimate publisher numbering schemes (hive ticket 4f862bc7) -----------
+#
+# An earlier MAX_EPISODE_NUMBER of 999999 discarded every one of these in
+# production. They are deliberate schemes, not keyboard-mash, and each one is
+# pinned here so the bound cannot silently narrow back underneath them.
+
+@pytest.mark.parametrize('value, scheme', [
+    ('10000001', 'PodPlay offset range, first of a contiguous run'),
+    ('10000033', 'PodPlay offset range, last of a contiguous run'),
+    ('20260821', 'Megaphone YYYYMMDD'),
+    ('20260901', 'Megaphone YYYYMMDD'),
+    ('20250429', 'NBC News YYYYMMDD'),
+    ('20260409', 'NBC News YYYYMMDD'),
+    ('2026040110', 'NBC News YYYYMMDD + hour'),
+    ('2026040123', 'NBC News YYYYMMDD + hour, largest legitimate observed'),
+    ('202605001', 'NBC News YYYYMM + sequence'),
+    ('2026050107', 'NBC News YYYYMM + sequence'),
+    ('2603039', 'NBC News YYMMDD-ish'),
+    ('156556622', 'Anchor, platform-internal id shape'),
+])
+def test_real_publisher_numbering_survives(value, scheme):
+    record = build_record(f'<itunes:episode>{value}</itunes:episode>')
+    assert record['episode_number'] == int(value), scheme
+
+
+def test_mash_still_separable_from_legitimate_numbering():
+    # The bound has to sit between the largest real value and the smallest
+    # mash value. If someone widens it past 4848484848 the original bug is back.
+    assert 2026040123 <= MAX_EPISODE_NUMBER < 4848484848
+
+
+# --- enclosure_size (hive ticket dc0e9231) ----------------------------------
+
+def build_record_with_enclosure(length: str) -> dict:
+    feed = FEED_TEMPLATE.replace(
+        b'length="12345"', f'length="{length}"'.encode('utf-8')) % b''
+    podcast = Podcast(feed, feed_url='https://example.com/rss')
+    return podcast.items[0].to_db_record(podcast_id='pod-1')
+
+
+def test_plausible_enclosure_size_survives():
+    assert build_record_with_enclosure('52428800')['enclosure_size'] == 52428800
+
+
+def test_implausible_enclosure_size_is_dropped():
+    assert build_record_with_enclosure('4455445544554455445')['enclosure_size'] is None
+
+
+def test_non_numeric_enclosure_size_is_dropped():
+    assert build_record_with_enclosure('unknown')['enclosure_size'] is None
+
+
+def test_enclosure_bound_is_inclusive():
+    assert bounded_int(str(MAX_ENCLOSURE_BYTES), MAX_ENCLOSURE_BYTES, 'enclosure length') == MAX_ENCLOSURE_BYTES
+    assert bounded_int(str(MAX_ENCLOSURE_BYTES + 1), MAX_ENCLOSURE_BYTES, 'enclosure length') is None
