@@ -13,6 +13,7 @@ __pycache__/
 .Python
 include/
 lib/
+lib64
 local/__init__.py
 local/__pycache__/
 tests/__init__.py
