@@ -62,6 +62,7 @@ class Podcast():
     def __init__(self, feed_content, feed_url=None):
         self.feed_content = feed_content
         self.feed_url = feed_url
+        self.podcast_guid = None
         self.items = []
         self.itunes_categories = []
 
@@ -128,9 +129,16 @@ class Podcast():
             raise InvalidPodcastFeed(f"Invalid Podcast Feed error: {ae}")
 
         # Populate attributes based on feed content
+        podcast_guid_seen = False
         for c in channel_items:
             if not isinstance(c, Tag):
                 continue
+            # XML prefixes are aliases; identify the show GUID by expanded name.
+            # Keep the first occurrence, as with other singleton channel fields.
+            if (c.namespace == 'https://podcastindex.org/namespace/1.0'
+                    and c.name == 'guid' and not podcast_guid_seen):
+                self.podcast_guid = tag_text(c) or c.get_text(strip=True) or None
+                podcast_guid_seen = True
             try:
                 # Pop method to skip duplicated tag on invalid feeds
                 tag_tuple = (c.prefix, c.name)
@@ -256,15 +264,6 @@ class Podcast():
         else:
             podcast_id = None
 
-        # Extract podcast_guid from namespaces if present
-        podcast_guid = None
-        if 'podcast' in self.namespaces and 'guid' in self.namespaces['podcast']:
-            guid_data = self.namespaces['podcast']['guid']
-            if isinstance(guid_data, dict):
-                podcast_guid = guid_data.get('value')
-            else:
-                podcast_guid = guid_data
-
         # Extract iTunes ID if available (would need to be parsed from feed_url or other source)
         itunes_id = None
 
@@ -298,7 +297,7 @@ class Podcast():
 
         return {
             'id': podcast_id,
-            'podcast_guid': podcast_guid,
+            'podcast_guid': self.podcast_guid,
             'title': self.title,
             'feed_url': self.feed_url,
             'image_url': image_url,

@@ -4,6 +4,10 @@ Standard tags handled by the parser's first pass must NOT be duplicated
 into the namespaces dict (previously the skip check was inverted and every
 standard tag leaked into DB extras JSON — HiveMake ticket 15369e5e review).
 """
+from typing import Optional
+
+import pytest
+
 from pg_podcast_toolkit.podcast import Podcast
 
 
@@ -67,3 +71,81 @@ def test_unknown_item_tags_are_captured():
         'url': 'https://example.com/t.txt',
         'type': 'text/plain',
     }
+
+
+@pytest.mark.parametrize("guid_tag", [
+    '<podcast:guid xmlns:podcast="https://podcastindex.org/namespace/1.0">show-guid</podcast:guid>',
+    '<p:guid xmlns:p="https://podcastindex.org/namespace/1.0">show-guid</p:guid>',
+    '<guid xmlns="https://podcastindex.org/namespace/1.0">show-guid</guid>',
+])
+def test_podcast_guid_recognized_by_namespace_uri(guid_tag: str) -> None:
+    feed = f'<rss><channel><title>Show</title>{guid_tag}</channel></rss>'.encode()
+    podcast = Podcast(feed, feed_url='https://example.com/feed.xml')
+
+    assert podcast.to_db_record()['podcast_guid'] == 'show-guid'
+    assert podcast.to_dict()['podcast_guid'] == 'show-guid'
+
+
+@pytest.mark.parametrize("guid_tag", [
+    '<podcast:guid xmlns:podcast="https://example.com/unrelated">wrong-guid</podcast:guid>',
+    '<guid>wrong-guid</guid>',
+    '<item><guid>episode-guid</guid></item>',
+])
+def test_unrelated_guids_are_not_podcast_guids(guid_tag: str) -> None:
+    feed = f'<rss><channel><title>Show</title>{guid_tag}</channel></rss>'.encode()
+    podcast = Podcast(feed)
+
+    assert podcast.to_db_record()['podcast_guid'] is None
+
+
+def test_guid_namespace_rebinding_does_not_override_identity() -> None:
+    feed = b'''<rss xmlns:podcast="https://example.com/unrelated">
+      <channel><title>Show</title>
+        <podcast:guid>wrong-guid</podcast:guid>
+        <podcast:guid xmlns:podcast="https://podcastindex.org/namespace/1.0">show-guid</podcast:guid>
+        <item><title>Episode</title><guid>ep-1</guid></item>
+      </channel>
+    </rss>'''
+    podcast = Podcast(feed, feed_url='https://example.com/feed.xml')
+    record = podcast.to_db_record()
+    assert record['podcast_guid'] == 'show-guid'
+    assert record['id'] == 'f7880620c8c1d31d1b57c3edde9deffa'
+    assert podcast.items[0].guid == 'ep-1'
+    assert isinstance(podcast.namespaces['podcast']['guid'], list)
+
+
+@pytest.mark.parametrize("first_value, expected", [
+    ('first-guid', 'first-guid'),
+    ('', None),
+    ('<![CDATA[  first-guid  ]]>', '  first-guid  '),
+])
+def test_first_guid_wins_across_namespace_aliases(
+    first_value: str, expected: Optional[str],
+) -> None:
+    feed = f'''<rss xmlns:p="https://podcastindex.org/namespace/1.0"
+                    xmlns:podcast="https://podcastindex.org/namespace/1.0">
+      <channel><title>Show</title>
+        <p:guid>{first_value}</p:guid>
+        <podcast:guid>second-guid</podcast:guid>
+      </channel>
+    </rss>'''.encode()
+    podcast = Podcast(feed)
+
+    assert podcast.to_db_record()['podcast_guid'] == expected
+    assert podcast.to_dict()['podcast_guid'] == expected
+
+
+def test_namespace_alias_preserves_podcast_and_episode_ids() -> None:
+    original = Podcast(FEED, feed_url='https://example.com/feed.xml')
+    aliased_feed = FEED.replace(b'xmlns:podcast=', b'xmlns:p=').replace(
+        b'podcast:', b'p:')
+    aliased = Podcast(aliased_feed, feed_url='https://example.com/feed.xml')
+
+    original_id = original.to_db_record()['id']
+    aliased_id = aliased.to_db_record()['id']
+    assert aliased_id == original_id
+    assert aliased.items[0].to_db_record(aliased_id)['id'] == (
+        original.items[0].to_db_record(original_id)['id']
+    )
+    assert aliased.to_db_record()['podcast_guid'] == original.to_db_record()['podcast_guid']
+    assert aliased.namespaces['p']['guid'] == original.namespaces['podcast']['guid']
